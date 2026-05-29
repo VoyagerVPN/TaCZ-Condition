@@ -52,7 +52,17 @@ public class VanillaModelScanner {
                     .rotateY((float) Math.toRadians(-ClientModelTracker.currentCameraYaw - 180.0f))
                     .rotateX((float) Math.toRadians(-ClientModelTracker.currentCameraPitch));
                 Matrix4f rotationTransform = new Matrix4f().mul(cameraInverse).mul(entry.pose());
-                rotationTransform.setTranslation(0.0f, 0.0f, 0.0f); // Убираем глобальный перенос камеры и игрока
+
+                // Вычитаем глобальный перенос (позиция игрока - позиция камеры)
+                Vec3 entityPos = ClientModelTracker.currentlyScanningEntity.position();
+                Vec3 cameraPos = ClientModelTracker.currentCameraPos;
+                double dx = entityPos.x - cameraPos.x;
+                double dy = entityPos.y - cameraPos.y;
+                double dz = entityPos.z - cameraPos.z;
+
+                rotationTransform.m30((float) (rotationTransform.m30() - dx));
+                rotationTransform.m31((float) (rotationTransform.m31() - dy));
+                rotationTransform.m32((float) (rotationTransform.m32() - dz));
 
                 for (ModelPart.Cube cuboid : cuboids) {
                     AABB box = new AABB(
@@ -60,7 +70,7 @@ public class VanillaModelScanner {
                         cuboid.maxX * scale, cuboid.maxY * scale, cuboid.maxZ * scale
                     );
                     // Точкой отсчета является мировая позиция игрока
-                    RotatedHitbox obb = new RotatedHitbox(box, rotationTransform, ClientModelTracker.currentlyScanningEntity.position(), bodyPart);
+                    RotatedHitbox obb = new RotatedHitbox(box, rotationTransform, entityPos, bodyPart);
                     ((IAccurateEntity) ClientModelTracker.currentlyScanningEntity).condition$getHitboxes().add(obb);
                 }
             }
