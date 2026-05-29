@@ -149,22 +149,16 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, M extend
                         
                         List<RotatedHitbox> localBoxes = new ArrayList<>();
                         float yBodyRot = player.yBodyRot;
-                        Vec3 playerPos = player.position();
                         Matrix4f rotY = new Matrix4f().rotateY((float) Math.toRadians(yBodyRot));
 
                         for (RotatedHitbox obb : boxes) {
                             // M_local = RotationY(yBodyRot) * M_world
                             Matrix4f localM = new Matrix4f(rotY).mul(obb.transformMatrix);
 
-                            // O_local = RotationY(yBodyRot) * (O_world - player_pos)
-                            Vec3 diff = obb.worldOffset.subtract(playerPos);
-                            Vector3f localO = new Vector3f((float) diff.x, (float) diff.y, (float) diff.z);
-                            rotY.transformPosition(localO);
-
                             localBoxes.add(new RotatedHitbox(
                                 obb.localBounds,
                                 localM,
-                                new Vec3(localO.x, localO.y, localO.z),
+                                Vec3.ZERO, // Локальный оффсет OBB теперь всегда Vec3.ZERO, так как O_world равен player.position()
                                 obb.bodyPart
                             ));
                         }

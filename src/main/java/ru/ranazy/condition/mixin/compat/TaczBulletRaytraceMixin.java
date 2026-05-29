@@ -17,6 +17,8 @@ import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import ru.ranazy.condition.Condition;
 import ru.ranazy.condition.common.DamageInterceptHandler;
@@ -74,10 +76,8 @@ public class TaczBulletRaytraceMixin {
                     // M_world = RotationY(-player.yBodyRot) * M_local
                     Matrix4f worldM = new Matrix4f(rotYNeg).mul(obb.transformMatrix);
 
-                    // O_world = RotationY(-player.yBodyRot) * O_local + player_pos
-                    Vector3f worldO = new Vector3f((float) obb.worldOffset.x, (float) obb.worldOffset.y, (float) obb.worldOffset.z);
-                    rotYNeg.transformPosition(worldO);
-                    Vec3 realWorldOffset = new Vec3(worldO.x, worldO.y, worldO.z).add(playerPos);
+                    // O_world = player_pos, так как O_local равен Vec3.ZERO
+                    Vec3 realWorldOffset = playerPos;
 
                     checkObb = new RotatedHitbox(obb.localBounds, worldM, realWorldOffset, obb.bodyPart);
                 } else {
@@ -158,5 +158,15 @@ public class TaczBulletRaytraceMixin {
                 cir.setReturnValue(null);
             }
         }
+    }
+
+    @ModifyConstant(
+        method = {"findEntityOnPath", "findEntitiesOnPath"},
+        constant = @Constant(doubleValue = 1.0),
+        remap = false
+    )
+    private static double condition$modifyInflate(double original) {
+        // Увеличиваем радиус поиска коробки пули до 3.0 блоков для надежного нахождения OBB в любых позах (включая prone)
+        return 3.0;
     }
 }

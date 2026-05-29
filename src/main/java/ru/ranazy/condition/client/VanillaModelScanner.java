@@ -52,13 +52,15 @@ public class VanillaModelScanner {
                     .rotateY((float) Math.toRadians(-ClientModelTracker.currentCameraYaw - 180.0f))
                     .rotateX((float) Math.toRadians(-ClientModelTracker.currentCameraPitch));
                 Matrix4f rotationTransform = new Matrix4f().mul(cameraInverse).mul(entry.pose());
+                rotationTransform.setTranslation(0.0f, 0.0f, 0.0f); // Убираем глобальный перенос камеры и игрока
 
                 for (ModelPart.Cube cuboid : cuboids) {
                     AABB box = new AABB(
                         cuboid.minX * scale, cuboid.minY * scale, cuboid.minZ * scale,
                         cuboid.maxX * scale, cuboid.maxY * scale, cuboid.maxZ * scale
                     );
-                    RotatedHitbox obb = new RotatedHitbox(box, rotationTransform, ClientModelTracker.currentCameraPos, bodyPart);
+                    // Точкой отсчета является мировая позиция игрока
+                    RotatedHitbox obb = new RotatedHitbox(box, rotationTransform, ClientModelTracker.currentlyScanningEntity.position(), bodyPart);
                     ((IAccurateEntity) ClientModelTracker.currentlyScanningEntity).condition$getHitboxes().add(obb);
                 }
             }
