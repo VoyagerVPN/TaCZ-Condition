@@ -1,0 +1,119 @@
+plugins {
+    id 'eclipse'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '6.0.+'
+}
+
+version = project.mod_version
+group = project.mod_group_id
+
+base {
+    archivesName = project.mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty('java.version')} JVM: ${System.getProperty('java.vm.version')} (${System.getProperty('java.vendor')}) Arch: ${System.getProperty('os.arch')}"
+
+minecraft {
+    mappings channel: project.mapping_channel, version: project.mapping_version
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${project.mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                "${project.mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+    }
+    maven {
+        name = 'Minecraft'
+        url = 'https://libraries.minecraft.net/'
+    }
+    // Cloth Config API
+    maven {
+        name = 'Cloth Config'
+        url = 'https://maven.shedaniel.me/'
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${project.forge_version}"
+
+    // Compile-only dependencies (loaded at runtime by test server)
+    compileOnly files('../test server/mods/tacz-1.20.1-1.1.8-release.jar')
+    compileOnly files('../test server/mods/firstaid-1.20.1-1.1.jar')
+    compileOnly files('../test server/mods/geckolib-forge-1.20.1-4.8.3.jar')
+
+    // Cloth Config API - for configuration screens
+    implementation fg.deobf("maven.modrinth:cloth-config:11.1.136+forge")
+}
+
+jar {
+    manifest {
+        attributes([
+                "Specification-Title"     : project.mod_id,
+                "Specification-Vendor"    : project.mod_authors,
+                "Specification-Version"   : "1",
+                "Implementation-Title"    : project.projectDir.name,
+                "Implementation-Version"  : project.jar.archiveVersion,
+                "Implementation-Vendor"   : project.mod_authors,
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('deployBuiltTrauma', Exec) {
+    group = 'deployment'
+    description = 'Deploys the built trauma jar to local Pinecone test instances.'
+    dependsOn 'reobfJar'
+
+    def artifactFile = tasks.named('jar').flatMap { it.archiveFile }
+
+    inputs.file(artifactFile)
+    outputs.upToDateWhen { false }
+
+    commandLine 'powershell.exe',
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', rootProject.file('../scripts/deploy-built-artifact.ps1').absolutePath,
+            '-Component', 'trauma',
+            '-ArtifactPath', artifactFile.get().asFile.absolutePath
+}
+
+afterEvaluate {
+    tasks.named('reobfJar') {
+        finalizedBy tasks.named('deployBuiltTrauma')
+    }
+}

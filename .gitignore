@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+# Forge/Minecraft
+run/
+logs/
+*.log
+build_log*.txt
+bin/
+out/
+
+# OS/System
+.DS_Store
+Thumbs.db
+
+# Local config
+gradle.properties.local
+local.properties
