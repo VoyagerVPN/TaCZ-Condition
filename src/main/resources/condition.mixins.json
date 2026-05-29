@@ -10,7 +10,8 @@
   ],
   "client": [
     "client.ModelPartAccessor",
-    "client.LivingEntityRendererMixin"
+    "client.LivingEntityRendererMixin",
+    "client.ModelPartMixin"
   ],
   "injectors": {
     "defaultRequire": 1

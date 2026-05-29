@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.ranazy.condition.client.ClientModelTracker;
+import ru.ranazy.condition.client.PoseState;
 import ru.ranazy.condition.client.VanillaModelScanner;
 import ru.ranazy.condition.geometry.HitboxRegistry;
 import ru.ranazy.condition.geometry.RotatedHitbox;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -57,12 +59,16 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, M extend
         ClientModelTracker.currentCameraPitch = Minecraft.getInstance().gameRenderer.getMainCamera().getXRot();
         ClientModelTracker.currentCameraYaw = Minecraft.getInstance().gameRenderer.getMainCamera().getYRot();
 
+        if (this.getModel() instanceof net.minecraft.client.model.PlayerModel<?> playerModel) {
+            ClientModelTracker.registerParts(playerModel);
+        }
+
         ((IAccurateEntity) entity).condition$clearHitboxes();
     }
 
     @Inject(
         method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/EntityModel;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V")
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/EntityModel;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V", shift = At.Shift.AFTER)
     )
     private void extractHitboxes(T entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight, CallbackInfo ci) {
         if (ClientModelTracker.currentlyScanningEntity == entity) {
@@ -90,39 +96,11 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, M extend
                 ClientModelTracker.currentBlueprintBoxes.clear();
                 ClientModelTracker.isGeneratingBlueprint = false;
             }
-
-            // Сканируем живую модель в текущем кадре рендеринга
-            VanillaModelScanner.scanModel(this.getModel(), poseStack, false, entity.isBaby());
         }
     }
 
     @Unique
     private static final Map<UUID, PoseState> condition$lastSentPoses = new ConcurrentHashMap<>();
-
-    @Unique
-    private static class PoseState {
-        final boolean crouching;
-        final boolean crawling;
-        final float aimingProgress;
-        final boolean reloading;
-        final boolean bolting;
-
-        PoseState(boolean crouching, boolean crawling, float aimingProgress, boolean reloading, boolean bolting) {
-            this.crouching = crouching;
-            this.crawling = crawling;
-            this.aimingProgress = aimingProgress;
-            this.reloading = reloading;
-            this.bolting = bolting;
-        }
-
-        boolean hasChanged(boolean currentCrouching, boolean currentCrawling, float currentAiming, boolean currentReloading, boolean currentBolting) {
-            return this.crouching != currentCrouching ||
-                   this.crawling != currentCrawling ||
-                   Math.abs(this.aimingProgress - currentAiming) > 0.05f ||
-                   this.reloading != currentReloading ||
-                   this.bolting != currentBolting;
-        }
-    }
 
     @Inject(method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("RETURN"))
     private void postRender(T entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight, CallbackInfo ci) {
@@ -142,23 +120,46 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, M extend
                     float aiming = operator.getSynAimingProgress();
                     boolean reloading = operator.getSynReloadState().getStateType().isReloading();
                     boolean bolting = operator.getSynIsBolting();
+                    float pitch = player.getXRot();
+                    float headYawOffset = player.yHeadRot - player.yBodyRot;
+
+                    boolean isMoving = player.distanceToSqr(player.xOld, player.yOld, player.zOld) > 0.0001 || player.swingTime > 0 || player.walkAnimation.isMoving();
+                    long currentTime = System.currentTimeMillis();
 
                     PoseState lastState = condition$lastSentPoses.get(player.getUUID());
-                    if (lastState == null || lastState.hasChanged(crouching, crawling, aiming, reloading, bolting)) {
-                        condition$lastSentPoses.put(player.getUUID(), new PoseState(crouching, crawling, aiming, reloading, bolting));
+                    long currentLastMoveTime = isMoving ? currentTime : (lastState != null ? lastState.lastMoveTime : 0);
+
+                    if (lastState == null || lastState.hasChanged(crouching, crawling, aiming, reloading, bolting, pitch, headYawOffset, currentLastMoveTime, currentTime)) {
+                        condition$lastSentPoses.put(player.getUUID(), new PoseState(crouching, crawling, aiming, reloading, bolting, pitch, headYawOffset, currentTime, currentLastMoveTime));
                         
                         List<RotatedHitbox> localBoxes = new ArrayList<>();
-                        float yBodyRot = player.yBodyRot;
-                        Matrix4f rotY = new Matrix4f().rotateY((float) Math.toRadians(yBodyRot));
+
+                        // Конвертация camera-space → body-local для серверной отправки:
+                        // rotationTransform = cameraInverse × entry.pose()
+                        //   cameraInverse уже убирает ViewRot → rotationTransform = Translate(entityPos-camPos) × bodyTransforms
+                        // bodyLocal = bodyRotInv × entityTransInv × rotationTransform
+                        //   = RotateY(bodyYaw-180) × Translate(camPos-entityPos) × Translate(entityPos-camPos) × bodyTransforms
+                        //   = Scale(-1,-1,1) × Translate(0,-1.501,0) × boneChain (формат blueprint)
+                        float bodyYaw = Mth.rotLerp(partialTicks, player.yBodyRotO, player.yBodyRot);
+                        Matrix4f bodyRotInv = new Matrix4f()
+                            .rotateY((float) Math.toRadians(bodyYaw - 180.0f));
+                        Vec3 camPos = ClientModelTracker.currentCameraPos;
+                        Vec3 entityPos = player.position();
+                        Matrix4f entityTransInv = new Matrix4f().translate(
+                            (float)(camPos.x - entityPos.x),
+                            (float)(camPos.y - entityPos.y),
+                            (float)(camPos.z - entityPos.z)
+                        );
 
                         for (RotatedHitbox obb : boxes) {
-                            // M_local = RotationY(yBodyRot) * M_world
-                            Matrix4f localM = new Matrix4f(rotY).mul(obb.transformMatrix);
+                            Matrix4f bodyLocalM = new Matrix4f(bodyRotInv)
+                                .mul(entityTransInv)
+                                .mul(obb.transformMatrix);
 
                             localBoxes.add(new RotatedHitbox(
                                 obb.localBounds,
-                                localM,
-                                Vec3.ZERO, // Локальный оффсет OBB теперь всегда Vec3.ZERO, так как O_world равен player.position()
+                                bodyLocalM,
+                                Vec3.ZERO,
                                 obb.bodyPart
                             ));
                         }

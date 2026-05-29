@@ -67,7 +67,7 @@ public class TaczBulletRaytraceMixin {
             }
             float targetYaw = player.yBodyRot;
             Vec3 playerPos = player.position();
-            Matrix4f rotYNeg = new Matrix4f().rotateY((float) Math.toRadians(-targetYaw));
+            Matrix4f rotYNeg = new Matrix4f().rotateY((float) Math.toRadians(180.0f - targetYaw));
 
             for (RotatedHitbox obb : activeHitboxes) {
                 RotatedHitbox checkObb;
@@ -116,7 +116,7 @@ public class TaczBulletRaytraceMixin {
                 
                 for (RotatedHitbox obb : blueprint) {
                     Matrix4f rotationMatrix = new Matrix4f()
-                        .rotateY((float) Math.toRadians(-targetYaw))
+                        .rotateY((float) Math.toRadians(180.0f - targetYaw))
                         .mul(obb.transformMatrix);
 
                     RotatedHitbox rotatedObb = new RotatedHitbox(obb.localBounds, rotationMatrix, player.position(), obb.bodyPart);
