@@ -3,9 +3,9 @@ loaderVersion="[47,)"
 license="All Rights Reserved"
 
 [[mods]]
-modId="trauma"
+modId="condition"
 version="${file.jarVersion}"
-displayName="[TaCZ] Trauma"
+displayName="Condition"
 credits="Ranazy"
 authors="Ranazy"
 description='''
@@ -13,35 +13,35 @@ Skeletal hitboxes, locational damage and realistic health system.
 Seamless integration with Timeless and Classics Zero (TacZ) and First Aid.
 '''
 
-[[dependencies.trauma]]
+[[dependencies.condition]]
     modId="forge"
     mandatory=true
     versionRange="[47,)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.trauma]]
+[[dependencies.condition]]
     modId="minecraft"
     mandatory=true
     versionRange="[1.20.1,1.21)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.trauma]]
+[[dependencies.condition]]
     modId="tacz"
     mandatory=true
     versionRange="[1.1.7,)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.trauma]]
+[[dependencies.condition]]
     modId="firstaid"
     mandatory=true
     versionRange="[1.1,)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.trauma]]
+[[dependencies.condition]]
     modId="geckolib"
     mandatory=true
     versionRange="[4.2.4,)"

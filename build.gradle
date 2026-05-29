@@ -2,6 +2,7 @@ plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '6.0.+'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 version = project.mod_version
@@ -14,6 +15,11 @@ base {
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 println "Java: ${System.getProperty('java.version')} JVM: ${System.getProperty('java.vm.version')} (${System.getProperty('java.vendor')}) Arch: ${System.getProperty('os.arch')}"
+
+mixin {
+    add sourceSets.main, "condition.refmap.json"
+    config "condition.mixins.json"
+}
 
 minecraft {
     mappings channel: project.mapping_channel, version: project.mapping_version
@@ -66,14 +72,17 @@ repositories {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.forge_version}"
-
     // Compile-only dependencies (loaded at runtime by test server)
     compileOnly files('../test server/mods/tacz-1.20.1-1.1.8-release.jar')
-    compileOnly files('../test server/mods/firstaid-1.20.1-1.1.jar')
+    compileOnly files('../test server/mods/firstaid-1.2.5+forge1.20.1.jar')
     compileOnly files('../test server/mods/geckolib-forge-1.20.1-4.8.3.jar')
+    compileOnly files('../test server/mods/lrarmor-1.20.1-0.1.4.4.jar')
 
     // Cloth Config API - for configuration screens
     implementation fg.deobf("maven.modrinth:cloth-config:11.1.136+forge")
+    
+    // Mixin Annotation Processor для генерации рефмапа в продакшене
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 jar {
@@ -85,7 +94,8 @@ jar {
                 "Implementation-Title"    : project.projectDir.name,
                 "Implementation-Version"  : project.jar.archiveVersion,
                 "Implementation-Vendor"   : project.mod_authors,
-                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "MixinConfigs"            : "condition.mixins.json"
         ])
     }
 }
@@ -94,9 +104,9 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-tasks.register('deployBuiltTrauma', Exec) {
+tasks.register('deployBuiltCondition', Exec) {
     group = 'deployment'
-    description = 'Deploys the built trauma jar to local Pinecone test instances.'
+    description = 'Deploys the built condition jar to local Pinecone test instances.'
     dependsOn 'reobfJar'
 
     def artifactFile = tasks.named('jar').flatMap { it.archiveFile }
@@ -108,12 +118,12 @@ tasks.register('deployBuiltTrauma', Exec) {
             '-NoProfile',
             '-ExecutionPolicy', 'Bypass',
             '-File', rootProject.file('../scripts/deploy-built-artifact.ps1').absolutePath,
-            '-Component', 'trauma',
+            '-Component', 'condition',
             '-ArtifactPath', artifactFile.get().asFile.absolutePath
 }
 
 afterEvaluate {
     tasks.named('reobfJar') {
-        finalizedBy tasks.named('deployBuiltTrauma')
+        finalizedBy tasks.named('deployBuiltCondition')
     }
 }
